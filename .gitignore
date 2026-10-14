@@ -1,0 +1,8 @@
+node_modules/
+
+# The model (~410 MB) and label list are downloaded on demand with
+# `npm run download-model` and are never committed to git.
+models/*
+!models/.gitkeep
+
+.DS_Store

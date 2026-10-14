@@ -1,0 +1,22 @@
+{
+  "name": "mybackyard",
+  "version": "0.0.1",
+  "description": "Proof of concept: identify birds from live microphone audio using Google's Perch 2.0 model",
+  "private": true,
+  "license": "UNLICENSED",
+  "bin": {
+    "mybackyard": "bin/mybackyard.js"
+  },
+  "scripts": {
+    "download-model": "node scripts/download-model.js",
+    "devices": "node bin/mybackyard.js devices",
+    "listen": "node bin/mybackyard.js listen",
+    "file": "node bin/mybackyard.js file"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "onnxruntime-node": "1.30.0"
+  }
+}
