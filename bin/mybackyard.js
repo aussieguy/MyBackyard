@@ -18,7 +18,9 @@
 //   --threshold  minimum confidence to report, in percent. Default: 50
 //   --top        maximum results per 5-second window. Default: 3
 //   --step       seconds between the start of each 5-second window.
-//                5 = no overlap; 2.5 = windows overlap by half. Default: 5
+//                5 = no overlap; 2.5 = windows overlap by half. Default: 2.5
+//                (overlap catches calls that straddle two windows, at the
+//                cost of the same call sometimes being reported twice)
 //   --verbose    also print windows where nothing was detected, plus how
 //                long the model took on each window
 //
@@ -43,7 +45,7 @@ const { values: options, positionals } = parseArgs({
     device:    { type: 'string', default: '0' },
     threshold: { type: 'string', default: '50' },
     top:       { type: 'string', default: '3' },
-    step:      { type: 'string', default: '5' },
+    step:      { type: 'string', default: '2.5' },
     verbose:   { type: 'boolean', default: false },
     help:      { type: 'boolean', short: 'h', default: false },
   },
@@ -163,7 +165,7 @@ Options:
   --device <n|name>   microphone to use (default 0)
   --threshold <pct>   minimum confidence to report (default 50)
   --top <n>           max results per 5-second window (default 3)
-  --step <seconds>    gap between window starts; <5 overlaps windows (default 5)
+  --step <seconds>    gap between window starts; <5 overlaps windows (default 2.5)
   --verbose           show empty windows and model timing`);
 }
 

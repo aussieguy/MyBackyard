@@ -23,7 +23,7 @@ npm run download-model   # deliberate, one-off download (~410 MB) into models/
 node bin/mybackyard.js devices                      # list microphones and their numbers
 node bin/mybackyard.js listen --device 1            # identify birds live (Ctrl+C to stop)
 node bin/mybackyard.js file recording.wav           # analyse a recording
-node bin/mybackyard.js listen --threshold 30 --step 2.5 --verbose
+node bin/mybackyard.js listen --threshold 30 --step 5 --verbose     # no window overlap
 ```
 
 The first time you use `listen`, macOS asks whether your terminal app may use the microphone.
