@@ -87,8 +87,4 @@ The normalisation and calibration values match how Google's own [perch-hoplite](
 
 This project deliberately uses **no** BirdNET code, models or data (BirdNET models and BirdNET-Pi are licensed CC BY-NC-SA 4.0, which does not allow commercial use).
 
-Before any commercial release:
-- Ship the Apache 2.0 licence text and attribution for Perch.
-- Review the ffmpeg licence terms if ffmpeg is bundled with the app.
-- Check each photo's licence terms are met (attribution, and share-alike for CC BY-SA), or license photos separately.
-- Get legal advice on the residual question of Perch's training data (some of it, e.g. Xeno-Canto recordings, carries non-commercial licences).
+![alt text](<Screenshot 2026-10-17 at 5.26.23 pm.png>)
