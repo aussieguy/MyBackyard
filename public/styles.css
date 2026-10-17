@@ -1,0 +1,486 @@
+/* ---------------------------------------------------------------------------
+   MyBackyard styles
+
+   The look: a calm "field guide" feel. Warm paper colours by day, deep
+   forest greens by night, serif type for bird names (like a printed bird
+   book) and clean sans-serif for everything else.
+
+   Colours are defined once as variables (the --names below) and reused
+   everywhere. The second block swaps them for dark versions when your Mac
+   is in Dark Mode - nothing else in the file needs to know about themes.
+
+   Fonts are the Mac's built-in ones, so nothing is downloaded.
+   --------------------------------------------------------------------------- */
+
+:root {
+  --bg: #f4f1ea;          /* page background: warm paper */
+  --surface: #fffdf8;     /* cards */
+  --surface-2: #efe9dd;   /* insets, tracks, placeholders */
+  --ink: #1d2620;         /* main text */
+  --muted: #5d6a61;       /* secondary text */
+  --faint: #8a948d;       /* hints, timestamps */
+  --line: rgba(29, 38, 32, 0.12);
+  --accent: #2f7d4a;      /* leaf green */
+  --accent-soft: #dcebdc;
+  --accent-ink: #1f5a34;
+  --amber: #c27a2c;
+  --danger: #b3261e;
+  --danger-soft: #f6dedb;
+  --shadow: 0 1px 2px rgba(29, 38, 32, 0.06), 0 8px 24px rgba(29, 38, 32, 0.06);
+  --photo-light: 34%;     /* lightness of placeholder art (see .art) */
+  --photo-bg-light: 88%;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif;
+  --font-serif: ui-serif, "New York", "Iowan Old Style", Georgia, serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --radius: 18px;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1411;
+    --surface: #151d18;
+    --surface-2: #1d2721;
+    --ink: #e6eee8;
+    --muted: #a2b0a6;
+    --faint: #6f7d74;
+    --line: rgba(230, 238, 232, 0.09);
+    --accent: #7fd39a;
+    --accent-soft: #1d3626;
+    --accent-ink: #a8e5bb;
+    --amber: #e3a55a;
+    --danger: #f2b8b5;
+    --danger-soft: #3b1a18;
+    --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.25);
+    --photo-light: 62%;
+    --photo-bg-light: 20%;
+    color-scheme: dark;
+  }
+}
+
+/* --- Basics ---------------------------------------------------------------- */
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, p { margin: 0; }
+h2 { font-size: 15px; font-weight: 600; }
+.muted { color: var(--muted); }
+code { font: 13px var(--font-mono); background: var(--surface-2); padding: 1px 6px; border-radius: 6px; }
+a { color: inherit; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.btn {
+  font: 500 14px var(--font-sans);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.btn:hover { background: var(--surface-2); }
+.btn:active { transform: scale(0.97); }
+
+/* --- Top bar --------------------------------------------------------------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px max(16px, calc((100vw - 1180px) / 2));
+  /* Slightly see-through with a blur, so content scrolling underneath
+     shows faintly - a common Mac-style touch. */
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(1.4) blur(14px);
+  -webkit-backdrop-filter: saturate(1.4) blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand-mark {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--bg);
+  display: grid; place-items: center;
+}
+.brand-mark svg { width: 24px; height: 24px; fill: currentColor; }
+.brand-name { font: 600 21px var(--font-serif); letter-spacing: -0.01em; }
+
+.topbar-right { display: flex; align-items: center; gap: 14px; }
+
+/* On a phone-width screen: put the status, meter and button on their own
+   full-width row under the name, and slim the meter so they all fit. */
+@media (max-width: 520px) {
+  .topbar-right { width: 100%; justify-content: space-between; gap: 10px; }
+  .meter { gap: 1px; }
+  .meter span { width: 2px; }
+}
+
+/* Status pill: the dot pulses while listening */
+.status {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; font-weight: 500;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.status[data-state="listening"] { background: var(--accent-soft); color: var(--accent-ink); }
+.status[data-state="listening"] .status-dot { background: var(--accent); animation: pulse 1.6s ease-in-out infinite; }
+.status[data-state="error"] { background: var(--danger-soft); color: var(--danger); }
+.status[data-state="error"] .status-dot { background: var(--danger); }
+
+@keyframes pulse {
+  0%, 100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 60%, transparent); }
+  50% { box-shadow: 0 0 0 6px transparent; }
+}
+
+/* Level meter: 20 thin bars; app.js adds .on to light them */
+.meter { display: flex; gap: 2px; align-items: center; height: 18px; }
+.meter span {
+  width: 3px; height: 100%;
+  border-radius: 2px;
+  background: var(--line);
+  transition: background 0.08s;
+}
+.meter span.on { background: var(--accent); }
+.meter span.on.hot { background: var(--amber); }
+
+/* --- Banner ---------------------------------------------------------------- */
+
+.banner {
+  max-width: 1180px;
+  margin: 16px auto 0;
+  padding: 12px 16px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 14px;
+  width: calc(100% - 32px);
+}
+
+/* --- Page layout ----------------------------------------------------------- */
+
+.layout {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 20px 16px 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 20px;
+  align-items: start;
+}
+.main-col, .side-col { display: grid; gap: 20px; min-width: 0; }
+.side-col { position: sticky; top: 84px; }
+
+@media (max-width: 920px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .side-col { position: static; }
+}
+
+.section-head {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.empty { font-size: 14px; padding: 8px 0; }
+
+/* --- Bird placeholder art & photos ------------------------------------------
+   When photos are off (or a species has none), we show the bird drawing on
+   a soft colour. app.js sets --h (a hue, 0-360) worked out from the
+   species name, so each species always gets its own consistent colour. */
+
+.art {
+  position: relative;
+  overflow: hidden;
+  background: hsl(var(--h, 140) 30% var(--photo-bg-light));
+  color: hsl(var(--h, 140) 32% var(--photo-light));
+  display: grid; place-items: center;
+}
+.art svg { width: 58%; height: 58%; fill: currentColor; }
+.art img {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.art img.loaded { opacity: 1; }
+
+/* --- Hero: "Now hearing" ---------------------------------------------------- */
+
+.hero { padding: 22px; min-height: 260px; display: grid; }
+
+.hero-idle { display: grid; place-items: center; text-align: center; gap: 6px; padding: 12px 0; }
+.hero-idle-title { font: 500 26px var(--font-serif); margin-top: 14px; }
+.hero-idle-sub { color: var(--muted); font-size: 14px; max-width: 380px; }
+
+/* The "listening" animation: rings ripple outward from the bird */
+.ripples { position: relative; width: 120px; height: 120px; display: grid; place-items: center; }
+.ripples svg { width: 54px; height: 54px; fill: var(--accent); position: relative; }
+.ripples span {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  opacity: 0;
+  animation: ripple 3s ease-out infinite;
+}
+.ripples span:nth-child(2) { animation-delay: 1s; }
+.ripples span:nth-child(3) { animation-delay: 2s; }
+@keyframes ripple {
+  0% { transform: scale(0.35); opacity: 0.55; }
+  100% { transform: scale(1); opacity: 0; }
+}
+.hero[data-state="paused"] .ripples span,
+.hero[data-state="error"] .ripples span { animation: none; }
+.hero[data-state="paused"] .ripples svg { fill: var(--faint); }
+
+.hero-bird {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 26px;
+  align-items: center;
+}
+.hero-bird.enter { animation: hero-in 0.5s ease-out; }
+@keyframes hero-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.hero-photo { aspect-ratio: 1; border-radius: 16px; }
+
+.eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.eyebrow.past { color: var(--faint); }
+.hero-name { font: 500 38px/1.1 var(--font-serif); letter-spacing: -0.015em; margin-top: 6px; }
+.hero-sci { font: italic 16px var(--font-serif); color: var(--muted); margin-top: 4px; }
+
+.hero-stats { display: flex; align-items: center; gap: 18px; margin-top: 18px; }
+.hero-meta { font-size: 14px; display: grid; gap: 2px; }
+
+/* Confidence ring. The circle's circumference is 2 x pi x 42 = 263.9.
+   app.js sets stroke-dashoffset: 263.9 = empty, 0 = full circle. */
+.ring { position: relative; width: 86px; height: 86px; flex-shrink: 0; }
+.ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.ring circle { fill: none; stroke-width: 8; }
+.ring-track { stroke: var(--surface-2); }
+.ring-fill {
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 263.9;
+  stroke-dashoffset: 263.9;
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.ring-value {
+  position: absolute; inset: 0;
+  display: grid; place-items: center;
+  font: 600 20px var(--font-sans);
+  font-variant-numeric: tabular-nums;
+}
+
+/* "Also hearing" chips for other birds in the same moment */
+.also { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
+.chip {
+  font-size: 13px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.chip b { color: var(--ink); font-weight: 500; }
+
+.credit { font-size: 11.5px; color: var(--faint); margin-top: 14px; }
+.credit a { color: var(--faint); }
+
+@media (max-width: 640px) {
+  .hero-bird { grid-template-columns: minmax(0, 1fr); }
+  .hero-photo { max-width: 260px; }
+  .hero-name { font-size: 30px; }
+}
+
+/* --- Visitors grid ------------------------------------------------------------ */
+
+.visitor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  gap: 14px;
+}
+
+.visitor {
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+.visitor:hover { transform: translateY(-2px); }
+.visitor .art { aspect-ratio: 4 / 3; }
+.visitor-body { padding: 10px 12px 12px; display: grid; gap: 2px; }
+.visitor-name { font: 500 17px/1.2 var(--font-serif); }
+.visitor-sci { font: italic 12.5px var(--font-serif); color: var(--muted); }
+.visitor-stats {
+  display: flex; gap: 8px; align-items: center;
+  margin-top: 8px;
+  font-size: 12px; color: var(--muted);
+}
+.pill {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-ink);
+}
+.visitor-stats .ago { margin-left: auto; color: var(--faint); }
+
+/* A card glows briefly when its bird is heard again */
+.visitor.ping { animation: ping 1.4s ease-out; }
+@keyframes ping {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent), var(--shadow); }
+  100% { box-shadow: 0 0 0 14px transparent, var(--shadow); }
+}
+
+/* --- Controls ----------------------------------------------------------------- */
+
+.controls { padding: 18px; display: grid; gap: 20px; }
+.control { display: grid; gap: 8px; }
+.control > label, .control .label, .control-row > label:first-child { font-size: 13px; font-weight: 600; }
+.control-row { display: flex; align-items: center; justify-content: space-between; }
+.value { font: 600 14px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--accent-ink); }
+.hint { font-size: 12.5px; color: var(--faint); line-height: 1.4; }
+
+select {
+  font: 14px var(--font-sans);
+  color: var(--ink);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  width: 100%;
+}
+
+/* Range slider, styled for WebKit (Safari/Chrome) and Firefox */
+input[type="range"] { width: 100%; accent-color: var(--accent); height: 22px; background: transparent; }
+
+/* Segmented control for the step */
+.segmented {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  background: var(--surface-2);
+  border-radius: 10px;
+  padding: 3px;
+  gap: 3px;
+}
+.segmented button {
+  font: 500 13px var(--font-sans);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 8px;
+  padding: 6px 0;
+  cursor: pointer;
+}
+.segmented button[aria-checked="true"] { background: var(--surface); color: var(--ink); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+
+/* On/off switch built from a hidden checkbox */
+.switch { position: relative; display: inline-flex; cursor: pointer; }
+.switch input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.switch-track {
+  width: 40px; height: 24px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  transition: background 0.2s;
+  position: relative;
+}
+.switch-thumb {
+  position: absolute; top: 2px; left: 2px;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 0.2s;
+}
+.switch input:checked + .switch-track { background: var(--accent); }
+.switch input:checked + .switch-track .switch-thumb { transform: translateX(16px); }
+.switch input:focus-visible + .switch-track { outline: 2px solid var(--accent); outline-offset: 2px; }
+.switch input:disabled + .switch-track { opacity: 0.5; cursor: not-allowed; }
+
+/* --- Live feed ------------------------------------------------------------------ */
+
+.feed-card { padding: 18px 18px 10px; }
+.feed {
+  list-style: none; margin: 0; padding: 0;
+  max-height: 520px;
+  overflow-y: auto;
+}
+.feed li {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr) 46px;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 0;
+  border-top: 1px solid var(--line);
+  font-size: 14px;
+}
+.feed li.new { animation: row-in 0.35s ease-out; }
+@keyframes row-in { from { opacity: 0; transform: translateX(-6px); } to { opacity: 1; transform: none; } }
+
+.feed-time { font: 12px var(--font-mono); color: var(--faint); font-variant-numeric: tabular-nums; }
+.feed-name { min-width: 0; }
+.feed-name .name { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-name .sub { display: block; font: italic 12px var(--font-serif); color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.feed-bar { height: 4px; border-radius: 2px; background: var(--surface-2); margin-top: 5px; overflow: hidden; }
+.feed-bar > span { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.feed-pct { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; font-size: 13px; }
+
+/* Non-bird sounds: greyed out with a small tag */
+.feed li.other .name, .feed li.other .feed-pct { color: var(--faint); }
+.feed li.other .feed-bar > span { background: var(--faint); }
+.tag {
+  display: inline-block;
+  font: 600 10.5px var(--font-sans);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--faint);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 5px;
+  margin-left: 6px;
+  vertical-align: 1px;
+}
+
+/* --- Footer --------------------------------------------------------------------- */
+
+.footer {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 24px 16px 32px;
+  font-size: 12px;
+  color: var(--faint);
+}
+
+/* Respect the Mac's "Reduce motion" accessibility setting */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

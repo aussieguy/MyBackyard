@@ -13,6 +13,11 @@
 //   mybackyard file <recording.wav> [--threshold 50] [--top 3] [--step 5]
 //       Analyse a recording and print what was heard, with timestamps.
 //
+//   mybackyard serve [--device 1] [--step 2.5] [--port 8420] [--file rec.wav]
+//       Start the web interface at http://localhost:8420. With --file, a
+//       recording is played in real time instead of using a microphone
+//       (handy for testing and demos).
+//
 // Options:
 //   --device     microphone number or name (from `devices`). Default: 0
 //   --threshold  minimum confidence to report, in percent. Default: 50
@@ -23,6 +28,8 @@
 //                cost of the same call sometimes being reported twice)
 //   --verbose    also print windows where nothing was detected, plus how
 //                long the model took on each window
+//   --port       web interface port (serve only). Default: 8420
+//   --file       recording to play instead of a microphone (serve only)
 //
 // From the project folder you can also use the npm shortcuts, e.g.
 //   npm run listen -- --device 1
@@ -47,6 +54,8 @@ const { values: options, positionals } = parseArgs({
     top:       { type: 'string', default: '3' },
     step:      { type: 'string', default: '2.5' },
     verbose:   { type: 'boolean', default: false },
+    port:      { type: 'string', default: '8420' },
+    file:      { type: 'string' },
     help:      { type: 'boolean', short: 'h', default: false },
   },
 });
@@ -153,6 +162,30 @@ async function analyseFile() {
   console.log('\nFinished.');
 }
 
+// Starts the web interface. The engine and server modules are only loaded
+// here, so the other commands don't pay for them.
+async function serve() {
+  const { Engine } = require('../src/engine');
+  const { startServer } = require('../src/server');
+
+  const port = Number(options.port);
+  if (!(Number.isInteger(port) && port > 0 && port < 65536)) fail('--port must be a number between 1 and 65535');
+
+  const engine = new Engine({ device: options.device, file: options.file || null, step: stepSeconds });
+  process.stdout.write('Loading Perch model... ');
+  await engine.init();
+  console.log('done');
+  if (!engine.getStatus().speciesIndex) {
+    console.log('Tip: run  npm run build-species-index  for common names, categories and photos.');
+  }
+
+  await startServer(engine, { port });
+  engine.start();
+  console.log(`\nMyBackyard is running at  http://localhost:${port}`);
+  console.log(options.file ? `Playing ${path.basename(options.file)} in real time.` : `Listening on microphone ${options.device}.`);
+  console.log('Press Ctrl+C to stop.');
+}
+
 function showHelp() {
   console.log(`MyBackyard - bird identification proof of concept (Google Perch 2.0)
 
@@ -160,13 +193,16 @@ Usage:
   mybackyard devices                 list microphones
   mybackyard listen [options]        identify birds live from a microphone
   mybackyard file <path> [options]   identify birds in a recording
+  mybackyard serve [options]         start the web interface
 
 Options:
   --device <n|name>   microphone to use (default 0)
   --threshold <pct>   minimum confidence to report (default 50)
   --top <n>           max results per 5-second window (default 3)
   --step <seconds>    gap between window starts; <5 overlaps windows (default 2.5)
-  --verbose           show empty windows and model timing`);
+  --verbose           show empty windows and model timing
+  --port <n>          web interface port (serve, default 8420)
+  --file <path>       play a recording instead of the mic (serve)`);
 }
 
 // --- Run the chosen command -------------------------------------------------
@@ -178,7 +214,7 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-const commands = { devices: showDevices, listen, file: analyseFile };
+const commands = { devices: showDevices, listen, file: analyseFile, serve };
 
 if (options.help || !command) {
   showHelp();

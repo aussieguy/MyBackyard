@@ -1,0 +1,172 @@
+<!doctype html>
+<!--
+  MyBackyard web interface.
+
+  This file is the page's skeleton: the fixed parts that are always there.
+  Everything that changes (birds heard, the live feed, the level meter) is
+  filled in by app.js as messages arrive from the server. The look is all
+  in styles.css.
+
+  Nothing is loaded from the internet except bird photos, and only when
+  you switch "Show photos" on.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MyBackyard</title>
+  <link rel="icon" href="bird.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- Top bar: name, listening status, level meter, pause button -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 100 100"><use href="#bird"/></svg></span>
+      <span class="brand-name">MyBackyard</span>
+    </div>
+    <div class="topbar-right">
+      <div class="status" id="status" role="status">
+        <span class="status-dot"></span>
+        <span class="status-text" id="status-text">Connecting…</span>
+      </div>
+      <!-- 20 small bars that light up with the microphone's loudness -->
+      <div class="meter" id="meter" aria-label="Microphone level" role="meter" aria-valuemin="0" aria-valuemax="100"></div>
+      <button class="btn" id="pause-btn" type="button">Pause</button>
+    </div>
+  </header>
+
+  <!-- Shown only if the species index hasn't been built yet -->
+  <div class="banner" id="index-banner" hidden>
+    Showing scientific names only. For common names, bird/non-bird sorting and photos, run
+    <code>npm run build-species-index</code> once, then restart.
+  </div>
+
+  <main class="layout">
+    <div class="main-col">
+
+      <!-- The big "Now hearing" card -->
+      <section class="hero card" id="hero" aria-live="polite">
+        <!-- Shown while waiting for the first bird -->
+        <div class="hero-idle" id="hero-idle">
+          <div class="ripples" aria-hidden="true">
+            <span></span><span></span><span></span>
+            <svg viewBox="0 0 100 100"><use href="#bird"/></svg>
+          </div>
+          <p class="hero-idle-title" id="hero-idle-title">Listening for birds</p>
+          <p class="hero-idle-sub" id="hero-idle-sub">The first results appear about five seconds after listening starts.</p>
+        </div>
+
+        <!-- Shown once a bird has been heard -->
+        <div class="hero-bird" id="hero-bird" hidden>
+          <div class="hero-photo" id="hero-photo"></div>
+          <div class="hero-info">
+            <p class="eyebrow" id="hero-eyebrow">Now hearing</p>
+            <h1 class="hero-name" id="hero-name"></h1>
+            <p class="hero-sci" id="hero-sci"></p>
+            <div class="hero-stats">
+              <!-- Confidence ring: an SVG circle whose outline is "drawn"
+                   to the confidence percentage -->
+              <div class="ring">
+                <svg viewBox="0 0 100 100" aria-hidden="true">
+                  <circle class="ring-track" cx="50" cy="50" r="42"/>
+                  <circle class="ring-fill" id="ring-fill" cx="50" cy="50" r="42"/>
+                </svg>
+                <span class="ring-value" id="ring-value"></span>
+              </div>
+              <div class="hero-meta">
+                <p id="hero-visits"></p>
+                <p class="muted" id="hero-first"></p>
+              </div>
+            </div>
+            <div class="also" id="hero-also"></div>
+            <p class="credit" id="hero-credit"></p>
+          </div>
+        </div>
+      </section>
+
+      <!-- One card per bird species heard this session -->
+      <section class="visitors">
+        <div class="section-head">
+          <h2>Heard this session</h2>
+          <span class="muted" id="visitor-count"></span>
+        </div>
+        <div class="visitor-grid" id="visitor-grid"></div>
+        <p class="empty muted" id="visitor-empty">Birds you hear will collect here.</p>
+      </section>
+    </div>
+
+    <aside class="side-col">
+
+      <!-- Settings -->
+      <section class="card controls">
+        <div class="control">
+          <label for="device-select">Microphone</label>
+          <select id="device-select"></select>
+          <p class="hint" id="file-note" hidden></p>
+        </div>
+
+        <div class="control">
+          <div class="control-row">
+            <label for="threshold">Confidence threshold</label>
+            <span class="value" id="threshold-value"></span>
+          </div>
+          <input type="range" id="threshold" min="5" max="95" step="1" value="20">
+          <p class="hint">Only sounds at or above this confidence are shown. Changes apply instantly, including to what's already been heard.</p>
+        </div>
+
+        <div class="control">
+          <span class="label" id="step-label">Window step</span>
+          <div class="segmented" role="radiogroup" aria-labelledby="step-label" id="step-group">
+            <button type="button" role="radio" data-step="1">1 s</button>
+            <button type="button" role="radio" data-step="2.5">2.5 s</button>
+            <button type="button" role="radio" data-step="5">5 s</button>
+          </div>
+          <p class="hint">Shorter steps overlap the 5-second windows, catching calls that fall across a boundary.</p>
+        </div>
+
+        <div class="control">
+          <div class="control-row">
+            <label for="photos-toggle">Show photos</label>
+            <label class="switch">
+              <input type="checkbox" id="photos-toggle">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+            </label>
+          </div>
+          <p class="hint" id="photos-hint">Loads bird photos from Wikimedia Commons. Off means nothing is fetched from the internet.</p>
+        </div>
+      </section>
+
+      <!-- Every detection, newest first -->
+      <section class="card feed-card">
+        <div class="section-head">
+          <h2>Live feed</h2>
+          <span class="muted" id="feed-count"></span>
+        </div>
+        <ol class="feed" id="feed"></ol>
+        <p class="empty muted" id="feed-empty">Nothing above the threshold yet.</p>
+      </section>
+    </aside>
+  </main>
+
+  <footer class="footer">
+    Nothing is saved: this session disappears when you reload or close the page.
+    Identification by Google Perch 2.0 (Apache 2.0). Names from Wikidata; photos from Wikimedia Commons, credited individually.
+  </footer>
+
+  <!-- The bird drawing, defined once and reused (via <use href="#bird">)
+       for the logo, the "listening" animation and photo placeholders. -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="bird" viewBox="0 0 100 100">
+      <path d="M26 57 L6 49 L11 63 Z"/>                    <!-- tail -->
+      <ellipse cx="47" cy="58" rx="25" ry="17"/>            <!-- body -->
+      <circle cx="67" cy="41" r="12.5"/>                    <!-- head -->
+      <path d="M78.5 37.5 L93 41.5 L78.5 45 Z"/>            <!-- beak -->
+      <path d="M41 73 L39 87 M53 73 L55 87" stroke="currentColor" stroke-width="3" stroke-linecap="round" fill="none"/> <!-- legs -->
+    </symbol>
+  </svg>
+
+  <script src="app.js"></script>
+</body>
+</html>

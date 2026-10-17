@@ -83,8 +83,13 @@ function listInputDevices() {
 //
 // Usage:
 //   for await (const samples of startFfmpeg([...])) { ... }
+//
+// Optional `signal` (an AbortSignal, from an AbortController) lets other code
+// stop the recording from outside - the web server uses this when you press
+// Pause or change microphone. Aborting stops ffmpeg, the audio simply ends,
+// and the for-await loop finishes normally (no error is thrown).
 // ---------------------------------------------------------------------------
-async function* startFfmpeg(inputArgs) {
+async function* startFfmpeg(inputArgs, { signal } = {}) {
   const ffmpeg = spawn('ffmpeg', [
     '-hide_banner',
     '-loglevel', 'error',  // only print real problems, not progress spam
@@ -110,6 +115,10 @@ async function* startFfmpeg(inputArgs) {
   // than being left running in the background holding the microphone.
   const stopFfmpeg = () => ffmpeg.kill('SIGTERM');
   process.once('exit', stopFfmpeg);
+
+  // Stop ffmpeg if the caller aborts (or had already aborted before we began).
+  if (signal?.aborted) stopFfmpeg();
+  signal?.addEventListener('abort', stopFfmpeg, { once: true });
 
   // Data from ffmpeg arrives in chunks of bytes whose size we don't control.
   // A chunk might end part-way through a 4-byte sample, so we keep any
@@ -140,6 +149,7 @@ async function* startFfmpeg(inputArgs) {
   } finally {
     // Runs when the loop finishes OR when the caller stops reading early.
     process.removeListener('exit', stopFfmpeg);
+    signal?.removeEventListener('abort', stopFfmpeg);
     stopFfmpeg();
   }
 
@@ -154,7 +164,7 @@ async function* startFfmpeg(inputArgs) {
 }
 
 // ---------------------------------------------------------------------------
-// streamFromMicrophone(device)
+// streamFromMicrophone(device, { signal })
 //
 // Live audio from a microphone. `device` can be the number shown by
 // `mybackyard devices` (e.g. 1) or the device's name (e.g. "Glen Microphone").
@@ -166,19 +176,23 @@ async function* startFfmpeg(inputArgs) {
 // the microphone. If you say no, ffmpeg will record silence or fail; you can
 // change it later in System Settings > Privacy & Security > Microphone.
 // ---------------------------------------------------------------------------
-function streamFromMicrophone(device) {
-  return startFfmpeg(['-f', 'avfoundation', '-i', `:${device}`]);
+function streamFromMicrophone(device, { signal } = {}) {
+  return startFfmpeg(['-f', 'avfoundation', '-i', `:${device}`], { signal });
 }
 
 // ---------------------------------------------------------------------------
-// streamFromFile(filePath)
+// streamFromFile(filePath, { realtime, signal })
 //
-// Audio from a recording on disk. '-re' is deliberately NOT used, so ffmpeg
-// decodes the file as fast as possible rather than in real time - a
-// 10-minute recording is analysed in seconds, not 10 minutes.
+// Audio from a recording on disk. By default ffmpeg decodes the file as fast
+// as possible - a 10-minute recording is analysed in seconds, not 10 minutes.
+//
+// With realtime: true we add ffmpeg's '-re' ("read at native rate") option,
+// which plays the file at normal speed, as if it were a live microphone.
+// The web interface uses this to demo/test with a recording.
 // ---------------------------------------------------------------------------
-function streamFromFile(filePath) {
-  return startFfmpeg(['-i', filePath]);
+function streamFromFile(filePath, { realtime = false, signal } = {}) {
+  const inputArgs = realtime ? ['-re', '-i', filePath] : ['-i', filePath];
+  return startFfmpeg(inputArgs, { signal });
 }
 
 module.exports = {

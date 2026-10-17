@@ -9,6 +9,8 @@
   },
   "scripts": {
     "download-model": "node scripts/download-model.js",
+    "build-species-index": "node scripts/build-species-index.js",
+    "serve": "node bin/mybackyard.js serve",
     "devices": "node bin/mybackyard.js devices",
     "listen": "node bin/mybackyard.js listen",
     "file": "node bin/mybackyard.js file"
