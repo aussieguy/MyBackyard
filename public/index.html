@@ -88,9 +88,32 @@
 
       <!-- One card per bird species heard this session -->
       <section class="visitors">
-        <div class="section-head">
-          <h2>Heard this session</h2>
-          <span class="muted" id="visitor-count"></span>
+        <!-- Heading (changes with the period chosen), the "Show" and
+             "Sort by" menus, and the number of species -->
+        <div class="section-head visitors-head">
+          <h2 id="visitor-heading">Heard this session</h2>
+          <div class="view-controls">
+            <label class="mini-select">
+              <span class="sr-only">Show</span>
+              <select id="range-select">
+                <option value="session">This session</option>
+                <option value="hour">Last hour</option>
+                <option value="day">Last 24 hours</option>
+                <option value="twoDays">Last 48 hours</option>
+              </select>
+            </label>
+            <label class="mini-select">
+              <span class="sr-only">Sort by</span>
+              <select id="sort-select">
+                <option value="recent">Most recent</option>
+                <option value="mostVisits">Most visits</option>
+                <option value="fewestVisits">Fewest visits</option>
+                <option value="confidence">Highest confidence</option>
+                <option value="name">A–Z</option>
+              </select>
+            </label>
+            <span class="muted" id="visitor-count"></span>
+          </div>
         </div>
         <div class="visitor-grid" id="visitor-grid"></div>
         <p class="empty muted" id="visitor-empty">Birds you hear will collect here.</p>
@@ -151,7 +174,7 @@
   </main>
 
   <footer class="footer">
-    Nothing is saved: this session disappears when you reload or close the page.
+    Nothing is saved to disk: the last 48 hours are kept in memory until MyBackyard is stopped.
     Identification by Google Perch 2.0 (Apache 2.0). Names from Wikidata; photos from Wikimedia Commons, credited individually.
   </footer>
 

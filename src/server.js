@@ -15,6 +15,9 @@
 //      updates.
 //   3. Accepts a few commands from the page: pause, resume, change
 //      microphone, change step.
+//   4. Remembers the last 48 hours of detections IN MEMORY ONLY (never on
+//      disk), so the page can show "last 24 hours" etc. and a reloaded
+//      page gets its history back. Stopping the server forgets it all.
 //
 // PRIVACY: the server only listens on 127.0.0.1 ("this computer"), so no
 // other device on your network can open the page.
@@ -38,6 +41,10 @@ const CONTENT_TYPES = {
 // Allowed values for the step setting (seconds).
 const ALLOWED_STEPS = [1, 2.5, 5];
 
+// How much history to keep in memory: 48 hours, the longest period the
+// page can show.
+const HISTORY_MS = 48 * 60 * 60 * 1000;
+
 // ---------------------------------------------------------------------------
 // startServer(engine, { port })
 // ---------------------------------------------------------------------------
@@ -53,9 +60,54 @@ function startServer(engine, { port = 8420 } = {}) {
     for (const res of clients) res.write(message);
   }
 
-  // Forward everything the engine reports straight to the pages.
+  // --- History (in memory only) -------------------------------------------
+  //
+  // Each detection is stored in a compact form - just the time and the
+  // label + confidence of each result - rather than the full version with
+  // names and photo details. At a 1-second step, 48 hours is ~170,000
+  // windows, so repeating names and photo addresses in every one would
+  // waste a lot of memory. The names are looked up again when the history
+  // is sent (see historyMessage).
+  //
+  //   { id: 42, time: 1760000000000, results: [['Turdus merula', 0.873], ...] }
+  const history = [];
+
+  function remember(detection) {
+    history.push({
+      id: detection.id,
+      time: detection.time,
+      // Confidence rounded to 3 decimal places (0.873) - more precision
+      // than that is meaningless and just makes the data bigger.
+      results: detection.results.map((r) => [r.label, Math.round(r.confidence * 1000) / 1000]),
+    });
+    // Forget detections older than 48 hours. They're at the front of the
+    // list (oldest first), so we remove from the front until we reach one
+    // that's recent enough.
+    const cutoff = Date.now() - HISTORY_MS;
+    while (history.length && history[0].time < cutoff) history.shift();
+  }
+
+  // Builds the 'history' message sent to a page when it connects:
+  //   windows - the compact history above
+  //   species - names, kind and photo for every label in it, sent once
+  //             each rather than once per detection
+  function historyMessage() {
+    const species = {};
+    for (const w of history) {
+      for (const [label] of w.results) {
+        if (!species[label]) species[label] = engine.species.describe(label);
+      }
+    }
+    return { windows: history, species };
+  }
+
+  // Forward everything the engine reports to the pages (and remember
+  // detections).
   engine.on('status', (status) => broadcast('status', status));
-  engine.on('detection', (detection) => broadcast('detection', detection));
+  engine.on('detection', (detection) => {
+    remember(detection);
+    broadcast('detection', detection);
+  });
   engine.on('level', (level) => broadcast('level', level));
 
   // --- Helpers ----------------------------------------------------------------
@@ -120,8 +172,11 @@ function startServer(engine, { port = 8420 } = {}) {
         Connection: 'keep-alive',
       });
       clients.add(res);
-      // Tell the new page the current state straight away.
+      // Tell the new page the current state and history straight away.
+      // (SSE messages arrive in order, so the page always gets the history
+      // before any new detections.)
       res.write(`event: status\ndata: ${JSON.stringify(engine.getStatus())}\n\n`);
+      res.write(`event: history\ndata: ${JSON.stringify(historyMessage())}\n\n`);
       req.on('close', () => clients.delete(res));
       return;
     }

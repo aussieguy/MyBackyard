@@ -28,11 +28,15 @@ node bin/mybackyard.js serve --file recording.wav    # play a recording in real 
 ```
 
 - **Now hearing** shows the latest bird with a confidence ring, plus any others heard at the same moment.
-- **Heard this session** has one card per species, with its best confidence and number of visits. Repeat detections within 15 seconds count as the same visit.
+- **Heard this session** has one card per species, with its best confidence and number of visits. Repeat detections within 15 seconds count as the same visit. Its **Show** menu limits the cards and live feed to the last hour, 24 hours or 48 hours; **Sort by** orders them by most recent, most visits, fewest visits, highest confidence or A–Z. ("Fewest visits" is a quick way to review one-off detections, which is where misidentifications tend to hide.)
 - **Live feed** lists every detection. Non-bird sounds (speech, dogs, frogs, insects…) are greyed out and tagged.
 - **Controls:** microphone, confidence threshold (re-filters everything already heard), window step (1 / 2.5 / 5 s) and **Show photos**.
 - **Photos are off by default.** When on, photos load from Wikimedia Commons, each credited to its photographer. When off, nothing is fetched from the internet.
-- **Nothing is saved.** The session lives in the page and disappears on reload. The server only accepts connections from this Mac.
+- **Nothing is saved to disk.** The server keeps the last 48 hours of detections in memory, so reloading the page doesn't lose them, but stopping the server does. The server only accepts connections from this Mac.
+- **Leaving it running overnight:** listening stops if the Mac sleeps. To keep it awake while MyBackyard runs, start it with macOS's built-in `caffeinate`:
+  ```bash
+  caffeinate -i node bin/mybackyard.js serve --device 1
+  ```
 
 ## Command line
 

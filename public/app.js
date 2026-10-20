@@ -11,9 +11,12 @@
 //   level     - microphone loudness, ~10 times a second
 //   detection - Perch's results for one 5-second window
 //
-// We keep every detection in memory (the `windows` list) for as long as the
-// page is open. That's what lets the threshold slider re-filter everything
-// instantly. Nothing is saved: reload the page and it starts fresh.
+// When the page connects, the server first sends a 'history' message: the
+// last 48 hours of detections, which the server keeps in memory (never on
+// disk). We hold them all in the `windows` list, which is what lets the
+// threshold slider, the "Show" period and "Sort by" re-arrange everything
+// instantly. Reloading the page fetches the history again; stopping the
+// server forgets it.
 // ---------------------------------------------------------------------------
 
 'use strict';
@@ -33,8 +36,19 @@ const NOW_MS = 10000;
 // Most rows shown in the live feed (older ones drop off the bottom).
 const FEED_MAX_ROWS = 200;
 
-// Most windows kept in memory: 20,000 x 2.5 s is about 14 hours.
-const MAX_WINDOWS = 20000;
+// How long detections are kept: 48 hours, matching the server, which is
+// the longest period the "Show" menu offers.
+const HISTORY_MS = 48 * 60 * 60 * 1000;
+
+// The "Show" menu's periods: how far back each looks (null = everything
+// the server remembers, i.e. since MyBackyard started, up to 48 hours),
+// and the heading shown above the species cards.
+const RANGES = {
+  session: { ms: null, heading: 'Heard this session' },
+  hour: { ms: 60 * 60 * 1000, heading: 'Heard in the last hour' },
+  day: { ms: 24 * 60 * 60 * 1000, heading: 'Heard in the last 24 hours' },
+  twoDays: { ms: 48 * 60 * 60 * 1000, heading: 'Heard in the last 48 hours' },
+};
 
 // Number of bars in the level meter.
 const METER_BARS = 20;
@@ -57,6 +71,8 @@ const state = {
   windows: [],         // every detection received, oldest first
   status: null,        // latest status message from the server
   heroKey: null,       // which detection the hero card is showing
+  range: 'session',    // the "Show" menu (a key of RANGES)
+  sort: 'recent',      // the "Sort by" menu (a key of SORTS, further down)
 };
 
 // Shortcut for document.getElementById.
@@ -157,15 +173,39 @@ function setCredit(container, result) {
 
 // --- Working out the session from the detections --------------------------------
 
-// Goes through every window (oldest first) and builds one summary per bird
-// species, using only results at or above the current threshold:
+// The earliest time included in a period, e.g. "24 hours ago" for 'day'.
+// For 'session' that's 0, i.e. the beginning of time - include everything.
+function cutoffFor(range) {
+  const ms = RANGES[range].ms;
+  return ms === null ? 0 : Date.now() - ms;
+}
+
+// Finds the position of the first window at or after `time` in the
+// windows list. Because the list is in time order we can use a "binary
+// search": check the middle, then throw away the half that can't contain
+// the answer, and repeat. Finding a spot among 170,000 windows takes ~17
+// steps instead of up to 170,000.
+function firstWindowFrom(time) {
+  let low = 0;
+  let high = state.windows.length;
+  while (low < high) {
+    const middle = (low + high) >> 1; // >> 1 halves and rounds down
+    if (state.windows[middle].time < time) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}
+
+// Goes through the windows in a period (oldest first) and builds one
+// summary per bird species, using only results at or above the threshold:
 //   visits - separate visits (see VISIT_GAP_MS)
 //   best   - highest confidence heard
 //   first / last - times first and most recently heard
 //   info   - names/photo (from the most recent detection)
-function summariseSpecies() {
+function summariseSpecies(range) {
   const species = new Map();
-  for (const w of state.windows) {
+  for (let i = firstWindowFrom(cutoffFor(range)); i < state.windows.length; i++) {
+    const w = state.windows[i];
     for (const r of w.results) {
       if (r.confidence < state.threshold || !isBird(r)) continue;
       let s = species.get(r.label);
@@ -276,14 +316,29 @@ function renderHeroEyebrow() {
 
 // --- Rendering: the visitors grid ------------------------------------------------
 
+// The "Sort by" options. Each is a comparison function, the standard way
+// JavaScript's sort() is told what order to use: given two species
+// summaries a and b, return a negative number if a should come first, or
+// positive if b should. Ties fall back to most recently heard first.
+const byRecent = (a, b) => b.last - a.last;
+const SORTS = {
+  recent: byRecent,
+  mostVisits: (a, b) => b.visits - a.visits || byRecent(a, b),
+  fewestVisits: (a, b) => a.visits - b.visits || byRecent(a, b),
+  confidence: (a, b) => b.best - a.best || byRecent(a, b),
+  // localeCompare sorts text alphabetically the way people expect,
+  // e.g. ignoring upper/lower case.
+  name: (a, b) => displayName(a.info).localeCompare(displayName(b.info)) || byRecent(a, b),
+};
+
 // Cards are kept and reused (one per species) rather than rebuilt each
 // time, so photos don't reload and the "ping" animation can play.
 const visitorCards = new Map();
 
 function renderVisitors(speciesSummary, justHeard = new Set()) {
   const grid = $('visitor-grid');
-  // Most recently heard first.
-  const sorted = [...speciesSummary.values()].sort((a, b) => b.last - a.last);
+  const sorted = [...speciesSummary.values()].sort(SORTS[state.sort]);
+  $('visitor-heading').textContent = RANGES[state.range].heading;
 
   // Remove cards for species no longer above the threshold.
   for (const [label, card] of visitorCards) {
@@ -324,6 +379,9 @@ function renderVisitors(speciesSummary, justHeard = new Set()) {
   }
 
   $('visitor-empty').hidden = sorted.length > 0;
+  $('visitor-empty').textContent = state.range === 'session'
+    ? 'Birds you hear will collect here.'
+    : 'No birds above the threshold in this period.';
   $('visitor-count').textContent = sorted.length ? `${sorted.length} species` : '';
 }
 
@@ -333,6 +391,7 @@ function renderVisitors(speciesSummary, justHeard = new Set()) {
 function feedRow(windowTime, r, isNew) {
   const li = el('li', isBird(r) ? '' : 'other');
   if (isNew) li.classList.add('new');
+  li.dataset.time = windowTime; // lets pruneFeed() find rows that have aged out
 
   li.appendChild(el('span', 'feed-time', clockTime(windowTime)));
 
@@ -352,12 +411,16 @@ function feedRow(windowTime, r, isNew) {
   return li;
 }
 
-// Rebuilds the whole feed (used when the threshold changes).
+// Rebuilds the whole feed (used when the threshold or period changes).
+// Works backwards from the newest window, stopping at the start of the
+// chosen period or once there are enough rows.
 function renderFeed() {
   const feed = $('feed');
   const rows = [];
+  const cutoff = cutoffFor(state.range);
   for (let i = state.windows.length - 1; i >= 0 && rows.length < FEED_MAX_ROWS; i--) {
     const w = state.windows[i];
+    if (w.time < cutoff) break;
     for (const r of w.results) {
       if (r.confidence >= state.threshold) rows.push(feedRow(w.time, r, false));
     }
@@ -374,6 +437,19 @@ function prependToFeed(w) {
   feed.prepend(...rows);
   while (feed.children.length > FEED_MAX_ROWS) feed.lastChild.remove();
   updateFeedCount();
+}
+
+// Removes rows that have fallen out of the chosen period (e.g. older than
+// one hour when showing "Last hour"). The oldest rows are at the bottom.
+function pruneFeed() {
+  const feed = $('feed');
+  const cutoff = cutoffFor(state.range);
+  let removed = false;
+  while (feed.lastChild && Number(feed.lastChild.dataset.time) < cutoff) {
+    feed.lastChild.remove();
+    removed = true;
+  }
+  if (removed) updateFeedCount();
 }
 
 function updateFeedCount() {
@@ -455,11 +531,14 @@ function renderLevel(rms) {
   $('meter').setAttribute('aria-valuenow', String(Math.round(meterValue * 100)));
 }
 
-// Redraws everything that depends on the threshold or detections.
+// Redraws everything that depends on the threshold, period, sort order or
+// detections. "Now hearing" always counts visits over the whole session;
+// the species cards use the period chosen in the "Show" menu.
 function renderAll(justHeard) {
-  const summary = summariseSpecies();
-  renderHero(summary);
-  renderVisitors(summary, justHeard);
+  const sessionSummary = summariseSpecies('session');
+  const rangeSummary = state.range === 'session' ? sessionSummary : summariseSpecies(state.range);
+  renderHero(sessionSummary);
+  renderVisitors(rangeSummary, justHeard);
 }
 
 // --- Talking to the server ------------------------------------------------------
@@ -508,10 +587,35 @@ function connect() {
     renderAll();
   });
 
+  // Sent once, straight after connecting: everything the server remembers.
+  // It replaces whatever we had, so a reconnect never duplicates rows.
+  events.addEventListener('history', (e) => {
+    const { windows, species } = JSON.parse(e.data);
+    // The server sends results compactly as [label, confidence] pairs, with
+    // each species' names/photo sent once in `species`. We rebuild full
+    // result objects using Object.create(info): a tiny object that adds
+    // `confidence` and borrows every other property (common, kind, photo,
+    // ...) from the shared `info` object. Rows read exactly like live
+    // results, but thousands of them don't each hold a copy of the names.
+    state.windows = windows.map((w) => ({
+      id: w.id,
+      time: w.time,
+      results: w.results.map(([label, confidence]) => {
+        const result = Object.create(species[label]);
+        result.confidence = confidence;
+        return result;
+      }),
+    }));
+    renderFeed();
+    renderAll();
+  });
+
   events.addEventListener('detection', (e) => {
     const w = JSON.parse(e.data);
     state.windows.push(w);
-    if (state.windows.length > MAX_WINDOWS) state.windows.shift();
+    // Forget anything older than 48 hours (the oldest is at the front).
+    const oldest = Date.now() - HISTORY_MS;
+    while (state.windows.length && state.windows[0].time < oldest) state.windows.shift();
     prependToFeed(w);
     // Birds in this window above the threshold get their card "pinged".
     const heard = new Set(w.results.filter((r) => isBird(r) && r.confidence >= state.threshold).map((r) => r.label));
@@ -535,6 +639,17 @@ $('threshold').addEventListener('input', (e) => {
   renderAll();
 });
 
+$('range-select').addEventListener('change', (e) => {
+  state.range = e.target.value;
+  renderFeed();
+  renderAll();
+});
+
+$('sort-select').addEventListener('change', (e) => {
+  state.sort = e.target.value;
+  renderAll();
+});
+
 $('step-group').addEventListener('click', (e) => {
   const step = e.target.closest('button')?.dataset.step;
   if (step) command('/api/settings', { step: Number(step) });
@@ -552,9 +667,15 @@ $('photos-toggle').addEventListener('change', (e) => {
   renderAll(); // swaps drawings for photos (or back) on every card
 });
 
-// Keep "2 min ago" labels fresh without waiting for the next detection.
+// Every 5 seconds: keep "2 min ago" labels fresh, and - when showing a
+// limited period like "Last hour" - let detections that have aged out of
+// it drop off, even if nothing new has been heard.
 setInterval(() => {
   renderHeroEyebrow();
+  if (state.range !== 'session') {
+    pruneFeed();
+    renderAll();
+  }
   for (const ago of document.querySelectorAll('.visitor .ago')) ago.textContent = timeAgo(Number(ago.dataset.time));
 }, 5000);
 
