@@ -15,10 +15,10 @@ It can be used two ways: a **web interface** in your browser, or a plain **comma
 ```bash
 npm install              # installs ONNX Runtime
 npm run download-model   # deliberate, one-off download (~410 MB) into models/
-npm run build-species-index   # optional, deliberate: common names, bird/non-bird sorting, photo credits (~10-20 min)
+npm run build-species-index   # optional, deliberate: names, categories, photo credits, family, status, descriptions (~15-25 min)
 ```
 
-The species index comes from Wikidata (names and categories, public domain) and Wikimedia Commons (photo addresses and credits). Without it, everything still works but species show scientific names only and photos are unavailable.
+The species index comes from Wikidata (names, categories, order, family and conservation status; public domain), Wikimedia Commons (photo addresses and credits) and English Wikipedia (short bird descriptions). Without it, everything still works but species show scientific names only, and photos and bird details are unavailable.
 
 ## Web interface
 
@@ -29,6 +29,7 @@ node bin/mybackyard.js serve --file recording.wav    # play a recording in real 
 
 - **Now hearing** shows the latest bird with a confidence ring, plus any others heard at the same moment.
 - **Heard this session** has one card per species, with its best confidence and number of visits. Repeat detections within 15 seconds count as the same visit. Its **Show** menu limits the cards and live feed to the last hour, 24 hours or 48 hours; **Sort by** orders them by most recent, most visits, fewest visits, highest confidence or A–Z. ("Fewest visits" is a quick way to review one-off detections, which is where misidentifications tend to hide.)
+- **Click a card** (or press Enter on it) to open its detail view: a larger photo, family and order, IUCN conservation status, a short description from Wikipedia, and for the chosen period its visits, best and average confidence, an activity timeline and the birds most often heard alongside it. Close with Esc, the × button or a click outside it.
 - **Live feed** lists every detection. Non-bird sounds (speech, dogs, frogs, insects…) are greyed out and tagged.
 - **Controls:** microphone, confidence threshold (re-filters everything already heard), window step (1 / 2.5 / 5 s) and **Show photos**.
 - **Photos are off by default.** When on, photos load from Wikimedia Commons, each credited to its photographer. When off, nothing is fetched from the internet.
@@ -86,6 +87,7 @@ The normalisation and calibration values match how Google's own [perch-hoplite](
 | `labels.csv` | Assets from Google's release, via [cgeorgiaw/Perch](https://huggingface.co/cgeorgiaw/Perch), pinned commit `c3c3c81` | Apache 2.0 |
 | Common names, categories | [Wikidata](https://www.wikidata.org) | CC0 (public domain) |
 | Bird photos | [Wikimedia Commons](https://commons.wikimedia.org), linked not copied | Per photo (mostly CC BY / CC BY-SA): credit shown with each photo |
+| Bird descriptions | [English Wikipedia](https://en.wikipedia.org), article introductions | CC BY-SA 4.0: credit and link shown with each description |
 | ONNX Runtime | Microsoft, `onnxruntime-node` | MIT |
 | ffmpeg | Called as a separate program, not bundled | LGPL/GPL (depends on build) |
 
@@ -94,7 +96,8 @@ This project deliberately uses **no** BirdNET code, models or data (BirdNET mode
 Before any commercial release:
 - Ship the Apache 2.0 licence text and attribution for Perch.
 - Review the ffmpeg licence terms if ffmpeg is bundled with the app.
-- Check each photo's licence terms are met (attribution, and share-alike for CC BY-SA), or license photos separately.
+- Check each photo's licence terms are met (attribution, and share-alike for CC BY-SA), or license photos separately. A few photos use the GFDL, which is impractical commercially - filter those out.
+- Wikipedia descriptions are CC BY-SA: the credit and link must stay, and share-alike applies to the text.
 - Get legal advice on the residual question of Perch's training data (some of it, e.g. Xeno-Canto recordings, carries non-commercial licences).
 
 ![MyBackyard web interface showing a Common Blackbird being heard, the species heard this session, controls and the live feed](docs/screenshot.png)

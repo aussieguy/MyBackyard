@@ -173,6 +173,60 @@
     </aside>
   </main>
 
+  <!-- The detail view that opens when you click a species card.
+       <dialog> is built into browsers: showModal() displays it on top of
+       the page, with a "backdrop" behind it (which we blur), and the Esc
+       key closes it. app.js fills in the contents. -->
+  <dialog class="detail" id="detail" aria-labelledby="detail-name">
+    <div class="detail-inner">
+      <button class="detail-close" id="detail-close" type="button" aria-label="Close">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+
+      <div class="detail-top">
+        <div class="detail-photo" id="detail-photo"></div>
+        <div class="detail-head">
+          <span class="status-badge" id="detail-status" hidden></span>
+          <h2 class="detail-name" id="detail-name"></h2>
+          <p class="detail-sci" id="detail-sci"></p>
+          <dl class="detail-taxon" id="detail-taxon"></dl>
+          <p class="credit" id="detail-credit"></p>
+        </div>
+      </div>
+
+      <!-- Four numbers for the chosen period -->
+      <div class="detail-stats">
+        <div class="stat"><span class="stat-label">Visits</span><span class="stat-value" id="stat-visits"></span></div>
+        <div class="stat"><span class="stat-label">Best confidence</span><span class="stat-value" id="stat-best"></span></div>
+        <div class="stat"><span class="stat-label">Average confidence</span><span class="stat-value" id="stat-average"></span></div>
+        <div class="stat"><span class="stat-label">First / last heard</span><span class="stat-value small" id="stat-times"></span></div>
+      </div>
+
+      <!-- When it was heard: a strip of bars across the chosen period -->
+      <section class="detail-section">
+        <h3>Activity <span class="muted" id="detail-period"></span></h3>
+        <div class="timeline" id="detail-timeline" role="img"></div>
+        <div class="timeline-axis"><span id="timeline-start"></span><span id="timeline-end"></span></div>
+      </section>
+
+      <section class="detail-section" id="detail-about">
+        <h3>About</h3>
+        <p class="detail-description" id="detail-description"></p>
+        <p class="credit" id="detail-wiki-credit"></p>
+      </section>
+
+      <section class="detail-section" id="detail-alongside-section">
+        <h3>Often heard alongside</h3>
+        <div class="also" id="detail-alongside"></div>
+      </section>
+
+      <p class="hint" id="detail-hint" hidden>
+        For family, conservation status and a description, rebuild the species index
+        (<code>npm run build-species-index</code>) and restart.
+      </p>
+    </div>
+  </dialog>
+
   <footer class="footer">
     Nothing is saved to disk: the last 48 hours are kept in memory until MyBackyard is stopped.
     Identification by Google Perch 2.0 (Apache 2.0). Names from Wikidata; photos from Wikimedia Commons, credited individually.

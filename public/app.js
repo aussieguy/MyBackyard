@@ -336,8 +336,15 @@ const SORTS = {
 const visitorCards = new Map();
 
 function renderVisitors(speciesSummary, justHeard = new Set()) {
+  // While the detail view is open, leave the grid exactly as it is, so the
+  // card you clicked doesn't move away underneath it. closeDetail()
+  // redraws it afterwards.
+  if ($('detail').open) return;
+
   const grid = $('visitor-grid');
   const sorted = [...speciesSummary.values()].sort(SORTS[state.sort]);
+  // Remember which card (if any) has keyboard focus, to restore it below.
+  const focusedCard = document.activeElement?.closest?.('.visitor') || null;
   $('visitor-heading').textContent = RANGES[state.range].heading;
 
   // Remove cards for species no longer above the threshold.
@@ -356,6 +363,12 @@ function renderVisitors(speciesSummary, justHeard = new Set()) {
       stats.append(el('span', 'pill'), el('span', 'visits'), el('span', 'ago'));
       body.appendChild(stats);
       card.append(art, body);
+      // Make the card behave like a button: reachable with the Tab key and
+      // announced as clickable by screen readers. (The click handler is
+      // set once on the whole grid - see "Wiring up the controls".)
+      card.tabIndex = 0;
+      card.setAttribute('role', 'button');
+      card.dataset.label = s.info.label;
       visitorCards.set(s.info.label, card);
     }
     setArt(card.firstChild, s.info);
@@ -365,17 +378,28 @@ function renderVisitors(speciesSummary, justHeard = new Set()) {
     card.querySelector('.visits').textContent = `${s.visits} ${s.visits === 1 ? 'visit' : 'visits'}`;
     card.querySelector('.ago').textContent = timeAgo(s.last);
     card.querySelector('.ago').dataset.time = s.last;
-    card.title = `Best ${percent(s.best)} · first heard ${shortTime(s.first)}`;
+    card.title = `Best ${percent(s.best)} · first heard ${shortTime(s.first)} · click for details`;
+    card.setAttribute('aria-label', `${displayName(s.info)}, ${s.visits} ${s.visits === 1 ? 'visit' : 'visits'}. Show details.`);
 
-    // appendChild on an existing card MOVES it - this puts every card in
-    // sorted order without recreating anything.
-    grid.appendChild(card);
+    // Put the card in its sorted position - but only move it if it isn't
+    // already there. Moving an element drops keyboard focus from it, so
+    // needlessly moving every card on every update would keep kicking a
+    // keyboard user off the card they're on. (insertBefore on a card
+    // that's already in the grid MOVES it rather than copying it.)
+    const position = sorted.indexOf(s);
+    if (grid.children[position] !== card) grid.insertBefore(card, grid.children[position] || null);
 
     if (justHeard.has(s.info.label)) {
       card.classList.remove('ping');
       void card.offsetWidth; // restart the animation
       card.classList.add('ping');
     }
+  }
+
+  // If the focused card had to move (e.g. its bird was just heard again and
+  // jumped to the front), moving it dropped the focus - put it back.
+  if (focusedCard?.isConnected && document.activeElement !== focusedCard) {
+    focusedCard.focus({ preventScroll: true });
   }
 
   $('visitor-empty').hidden = sorted.length > 0;
@@ -456,6 +480,247 @@ function updateFeedCount() {
   const n = $('feed').children.length;
   $('feed-empty').hidden = n > 0;
   $('feed-count').textContent = n ? `${n}${n === FEED_MAX_ROWS ? '+' : ''} shown` : '';
+}
+
+// --- The detail view (opens when a card is clicked) ------------------------------
+
+// Number of bars in the activity timeline.
+const TIMELINE_BARS = 48;
+
+// Which IUCN statuses count as safe / some concern / threatened, for the
+// badge colour (see .status-badge in styles.css).
+const STATUS_LEVELS = {
+  'Least Concern': 'safe',
+  'Near Threatened': 'concern',
+  'Vulnerable': 'concern',
+  'Endangered': 'threatened',
+  'Critically Endangered': 'threatened',
+  'Extinct In The Wild': 'threatened',
+};
+
+const detail = {
+  label: null,         // which species is open
+  card: null,          // the card it was opened from (for the animation)
+  extras: new Map(),   // details already fetched from the server, by label
+};
+
+// Gathers everything the detail view shows for one species over the
+// chosen period, from the detections in memory.
+function detailStats(label) {
+  const start = firstWindowFrom(cutoffFor(state.range));
+  const times = [];          // when it was detected
+  let total = 0;             // sum of confidences, for the average
+  let best = 0;
+  let visits = 0;
+  let last = 0;
+  const alongside = new Map(); // other bird -> number of shared windows
+
+  for (let i = start; i < state.windows.length; i++) {
+    const w = state.windows[i];
+    const mine = w.results.find((r) => r.label === label && r.confidence >= state.threshold);
+    if (!mine) continue;
+    if (w.time - last > VISIT_GAP_MS) visits++; // same visit rule as the cards
+    last = w.time;
+    times.push(w.time);
+    total += mine.confidence;
+    best = Math.max(best, mine.confidence);
+    // Every other bird heard in this same 5-second window.
+    for (const r of w.results) {
+      if (r.label === label || !isBird(r) || r.confidence < state.threshold) continue;
+      const entry = alongside.get(r.label) || { info: r, count: 0 };
+      entry.count++;
+      alongside.set(r.label, entry);
+    }
+  }
+
+  return {
+    times,
+    visits,
+    best,
+    average: times.length ? total / times.length : 0,
+    // The timeline runs from the start of the period (or, for "this
+    // session", the oldest detection we have) up to now.
+    periodStart: RANGES[state.range].ms === null
+      ? (state.windows[0]?.time ?? Date.now())
+      : cutoffFor(state.range),
+    alongside: [...alongside.values()].sort((a, b) => b.count - a.count).slice(0, 5),
+  };
+}
+
+// Draws the activity timeline: the period is split into TIMELINE_BARS
+// equal slices, and each bar's height shows how many detections fell in
+// its slice (relative to the busiest slice).
+function renderTimeline(times, periodStart) {
+  const end = Date.now();
+  const span = Math.max(end - periodStart, 1);
+  const counts = new Array(TIMELINE_BARS).fill(0);
+  for (const t of times) {
+    const slot = Math.min(TIMELINE_BARS - 1, Math.floor(((t - periodStart) / span) * TIMELINE_BARS));
+    if (slot >= 0) counts[slot]++;
+  }
+  const busiest = Math.max(...counts, 1);
+
+  const timeline = $('detail-timeline');
+  timeline.replaceChildren(...counts.map((count) => {
+    const bar = el('span', count ? 'on' : '');
+    // At least a sliver for any activity, so a single detection is visible.
+    bar.style.height = count ? `${Math.max(12, (count / busiest) * 100)}%` : '';
+    return bar;
+  }));
+  timeline.setAttribute('aria-label', `Detected ${times.length} times in this period`);
+
+  // Label the ends: clock times if within today-ish, else how long ago.
+  const label = (ms) => (end - ms < 20 * 60 * 60 * 1000 ? shortTime(ms) : timeAgo(ms));
+  $('timeline-start').textContent = label(periodStart);
+  $('timeline-end').textContent = 'now';
+}
+
+// Fills the detail view for a species. Called when it opens, and again
+// whenever a new detection arrives while it's open, so it stays live.
+function renderDetail() {
+  const label = detail.label;
+  if (!label) return;
+
+  // The basic info (names, photo) from the most recent detection of it.
+  let info = null;
+  for (let i = state.windows.length - 1; i >= 0 && !info; i--) {
+    info = state.windows[i].results.find((r) => r.label === label) || null;
+  }
+  if (!info) return;
+
+  setArt($('detail-photo'), info);
+  $('detail-name').textContent = displayName(info);
+  $('detail-sci').textContent = info.common ? info.scientific : '';
+  setCredit($('detail-credit'), info);
+
+  const stats = detailStats(label);
+  $('stat-visits').textContent = String(stats.visits);
+  $('stat-best').textContent = stats.times.length ? percent(stats.best) : '–';
+  $('stat-average').textContent = stats.times.length ? percent(stats.average) : '–';
+  $('stat-times').textContent = stats.times.length
+    ? `${shortTime(stats.times[0])} – ${shortTime(stats.times[stats.times.length - 1])}`
+    : '–';
+  $('detail-period').textContent = `· ${RANGES[state.range].heading.replace(/^Heard /, '')}`;
+  renderTimeline(stats.times, stats.periodStart);
+
+  const alongside = $('detail-alongside');
+  alongside.replaceChildren(...stats.alongside.map(({ info: other, count }) => {
+    const chip = el('span', 'chip');
+    chip.append(el('b', null, displayName(other)), ` ${count}×`);
+    return chip;
+  }));
+  $('detail-alongside-section').hidden = stats.alongside.length === 0;
+
+  renderDetailExtras();
+}
+
+// The parts that come from the species index (order, family, status,
+// description). Fetched from the server once per species, then reused.
+function renderDetailExtras() {
+  const extras = detail.extras.get(detail.label);
+  const hasIndexDetails = Boolean(state.status?.speciesDetails);
+  $('detail-hint').hidden = hasIndexDetails;
+
+  const taxon = $('detail-taxon');
+  taxon.replaceChildren();
+  const status = $('detail-status');
+  status.hidden = true;
+  $('detail-about').hidden = true;
+  if (!extras) return;
+
+  // "Family  Alcedinidae (Kingfisher)" / "Order  Coraciiformes"
+  for (const [title, group] of [['Family', extras.family], ['Order', extras.order]]) {
+    if (!group) continue;
+    const dd = el('dd');
+    dd.append(el('i', null, group.name));
+    if (group.common) dd.append(` (${group.common})`);
+    taxon.append(el('dt', null, title), dd);
+  }
+
+  if (extras.status) {
+    status.hidden = false;
+    status.textContent = extras.status;
+    status.dataset.level = STATUS_LEVELS[extras.status] || 'other';
+    status.title = 'Conservation status (IUCN Red List)';
+  }
+
+  if (extras.wiki) {
+    $('detail-about').hidden = false;
+    $('detail-description').textContent = extras.wiki.extract;
+    // Wikipedia's licence requires a credit and a link to the article.
+    const credit = $('detail-wiki-credit');
+    credit.replaceChildren('From Wikipedia, ');
+    const licence = el('a', null, 'CC BY-SA 4.0');
+    licence.href = 'https://creativecommons.org/licenses/by-sa/4.0/';
+    const article = el('a', null, 'Read more on Wikipedia');
+    article.href = extras.wiki.url;
+    for (const link of [licence, article]) { link.target = '_blank'; link.rel = 'noopener noreferrer'; }
+    credit.append(licence, ' · ', article);
+  }
+}
+
+// Works out the movement for the "fly out of the card" animation: how far
+// the dialog's centre is from the card's centre, and how much smaller the
+// card is. Used to start the dialog looking like it's sitting on the card.
+function cardToDialogTransform(card, dialog) {
+  const from = card.getBoundingClientRect();
+  const to = dialog.getBoundingClientRect();
+  const dx = from.left + from.width / 2 - (to.left + to.width / 2);
+  const dy = from.top + from.height / 2 - (to.top + to.height / 2);
+  const scale = from.width / to.width;
+  return `translate(${dx}px, ${dy}px) scale(${scale})`;
+}
+
+const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+async function openDetail(label, card) {
+  const dialog = $('detail');
+  detail.label = label;
+  detail.card = card;
+  renderDetail();
+  dialog.showModal();
+  dialog.scrollTop = 0;
+
+  // Fly out of the card: start at the card's position and size, then
+  // grow to full size in the centre. (The Web Animations API - element.animate()
+  // - plays a one-off animation between the two states we give it.)
+  if (!reducedMotion()) {
+    dialog.animate(
+      [{ transform: cardToDialogTransform(card, dialog), opacity: 0.3 }, { transform: 'none', opacity: 1 }],
+      { duration: 380, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)' },
+    );
+  }
+
+  // Fetch the extras the first time this species is opened.
+  if (!detail.extras.has(label) && state.status?.speciesDetails) {
+    try {
+      const extras = await (await fetch(`/api/species?label=${encodeURIComponent(label)}`)).json();
+      detail.extras.set(label, extras);
+      if (detail.label === label) renderDetailExtras();
+    } catch {
+      // Not fatal: the view just shows the live statistics.
+    }
+  }
+}
+
+async function closeDetail() {
+  const dialog = $('detail');
+  if (!dialog.open) return;
+  // Shrink back into the card (if it's still on the page), then close.
+  if (!reducedMotion() && detail.card?.isConnected) {
+    dialog.classList.add('closing');
+    await dialog.animate(
+      [{ transform: 'none', opacity: 1 }, { transform: cardToDialogTransform(detail.card, dialog), opacity: 0 }],
+      { duration: 260, easing: 'cubic-bezier(0.4, 0, 1, 1)' },
+    ).finished;
+    dialog.classList.remove('closing');
+  }
+  dialog.close();
+  const card = detail.card;
+  detail.label = null;
+  detail.card = null;
+  renderAll(); // catch the grid up on anything heard while it was open
+  card?.focus({ preventScroll: true }); // keyboard users land back on the card
 }
 
 // --- Rendering: status, controls and level meter --------------------------------
@@ -620,6 +885,7 @@ function connect() {
     // Birds in this window above the threshold get their card "pinged".
     const heard = new Set(w.results.filter((r) => isBird(r) && r.confidence >= state.threshold).map((r) => r.label));
     renderAll(heard);
+    if ($('detail').open) renderDetail(); // keep an open detail view live
   });
 
   events.addEventListener('level', (e) => renderLevel(JSON.parse(e.data).rms));
@@ -638,6 +904,29 @@ $('threshold').addEventListener('input', (e) => {
   renderFeed();
   renderAll();
 });
+
+// Clicking a card (or pressing Enter/Space on one) opens its detail view.
+// One listener on the whole grid handles every card, including cards
+// added later - the click "bubbles up" from the card to the grid.
+$('visitor-grid').addEventListener('click', (e) => {
+  const card = e.target.closest('.visitor');
+  if (card) openDetail(card.dataset.label, card);
+});
+$('visitor-grid').addEventListener('keydown', (e) => {
+  const card = e.target.closest('.visitor');
+  if (card && (e.key === 'Enter' || e.key === ' ')) {
+    e.preventDefault(); // stop Space from scrolling the page
+    openDetail(card.dataset.label, card);
+  }
+});
+
+// Closing: the × button, Esc (the dialog's 'cancel' event - we take it
+// over so the close can be animated), or a click on the blurred backdrop.
+// A backdrop click arrives as a click on the <dialog> element itself;
+// clicks on its contents arrive on the inner elements instead.
+$('detail-close').addEventListener('click', closeDetail);
+$('detail').addEventListener('cancel', (e) => { e.preventDefault(); closeDetail(); });
+$('detail').addEventListener('click', (e) => { if (e.target === $('detail')) closeDetail(); });
 
 $('range-select').addEventListener('change', (e) => {
   state.range = e.target.value;
@@ -672,6 +961,7 @@ $('photos-toggle').addEventListener('change', (e) => {
 // it drop off, even if nothing new has been heard.
 setInterval(() => {
   renderHeroEyebrow();
+  if ($('detail').open) renderDetail(); // keeps the timeline moving
   if (state.range !== 'session') {
     pruneFeed();
     renderAll();

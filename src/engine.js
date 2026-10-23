@@ -70,6 +70,7 @@ class Engine extends EventEmitter {
       message: this.message,
       settings: this.settings,
       speciesIndex: this.species?.available ?? false,
+      speciesDetails: this.species?.hasDetails ?? false,
     };
   }
 

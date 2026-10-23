@@ -181,6 +181,14 @@ function startServer(engine, { port = 8420 } = {}) {
       return;
     }
 
+    // Extra details for one species, e.g. /api/species?label=Turdus%20merula
+    // (answered from the local species index - nothing is fetched online).
+    if (req.method === 'GET' && url.pathname === '/api/species') {
+      const label = url.searchParams.get('label') || '';
+      sendJson(res, 200, engine.species.details(label));
+      return;
+    }
+
     if (req.method === 'GET' && url.pathname === '/api/devices') {
       try {
         sendJson(res, 200, { devices: listInputDevices() });

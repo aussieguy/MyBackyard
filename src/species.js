@@ -26,15 +26,21 @@ const SPECIES_NAME = /^[A-Z][a-z]+( [a-z][a-z-]*){1,2}$/;
 // loadSpeciesIndex()
 //
 // Reads the index once at start-up. Returns an object with:
-//   available - true if the index file exists
-//   describe(label) - see below
+//   available   - true if the index file exists
+//   hasDetails  - true if it's a version 2+ index, which includes order,
+//                 family, conservation status and Wikipedia descriptions
+//   describe(label) - the basics, sent with every detection (see below)
+//   details(label)  - the extras, sent only when a card is opened
 // ---------------------------------------------------------------------------
 function loadSpeciesIndex() {
   let species = {};
   let available = false;
+  let hasDetails = false;
   if (fs.existsSync(INDEX_PATH)) {
-    species = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8')).species || {};
+    const index = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8'));
+    species = index.species || {};
     available = true;
+    hasDetails = (index.version || 1) >= 2;
   }
 
   // -------------------------------------------------------------------------
@@ -63,7 +69,28 @@ function loadSpeciesIndex() {
     };
   }
 
-  return { available, describe };
+  // -------------------------------------------------------------------------
+  // details(label)
+  //
+  // The extra information shown when you click a species card. Kept
+  // separate from describe() because a description is a paragraph of text:
+  // sending it with every detection, several times a second, would be
+  // wasteful. Returns:
+  //   { order, family, status, wiki } - any of which may be null, where
+  //   order/family = { name, common }, status = e.g. "Least Concern",
+  //   wiki = { extract, url }
+  // -------------------------------------------------------------------------
+  function details(label) {
+    const info = species[label] || {};
+    return {
+      order: info.order || null,
+      family: info.family || null,
+      status: info.status || null,
+      wiki: info.wiki || null,
+    };
+  }
+
+  return { available, hasDetails, describe, details };
 }
 
 module.exports = { loadSpeciesIndex };
